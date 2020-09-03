@@ -15,7 +15,8 @@ import shutil
 input_image_width = 150
 input_image_height = 150
 
-opencv_data_dir = 'opencv/data/haarcascade/'
+curr_dirname = os.path.dirname(__file__)
+opencv_data_dir = curr_dirname + '/opencv/data/haarcascade/'
 classifier_xml_file = opencv_data_dir + 'haarcascade_frontalface_default.xml'
 
 if not os.path.exists(classifier_xml_file):
@@ -64,7 +65,6 @@ def getFaceImages(filename, dest, frame_w = input_image_width, frame_h = input_i
         cv2.imwrite(dest_file, resized)
         #cv2.imshow('image',resized)
         #cv2.waitKey(5000)
-    return
 
 def create_data_dir(src_dir, dirname, train, test):
     test_0 = dirname + '/test/0'
@@ -93,10 +93,6 @@ def create_data_dir(src_dir, dirname, train, test):
         else:
             getFaceImages(src_dir + file, test_0)
 
-    return
-
-
-
 def preprocess_data(dir_path, train_dest_dir, test_data_size = 0.2, filetypes = ['.jpg', '.jpeg', '.png', '.bmp']):
     files = []
     # search for supported extension types
@@ -114,10 +110,12 @@ def preprocess_data(dir_path, train_dest_dir, test_data_size = 0.2, filetypes = 
     random.shuffle(files)
     x_test, x_train = np.split(files, [int(total_files * test_data_size)])
     create_data_dir(dir_path, train_dest_dir, x_train, x_test)
-    return
 
-def train_model(mode, train_dirm chkpoint_path):
+
+def train_model(model, train_dir, cache_dir, test_generator):
     #prepare training data
+    model = createModel()
+    checkpoint_path = cache_dir + 'model-{epoch:03d}.model'
     training_data = ImageDataGenerator(rescale=1.0/255,
                                        rotation_range=40,
                                        width_shift_range=0.2,
@@ -130,53 +128,57 @@ def train_model(mode, train_dirm chkpoint_path):
                                                            batch_size=10, 
                                                            target_size=(input_image_width, input_image_height))
     #generate checkpoints
-    checkpoint = ModelCheckpoint(chkpoint_path,monitor='val_loss',verbose=0,save_best_only=True,mode='auto')
-    history = model.fit_generator(training_generator,
-                                  epochs=32,
-                                  validation_data=test_generator,
-                                  callbacks=[checkpoint])
-    model.save_weights(weights_file)
+    cp_callback = ModelCheckpoint(checkpoint_path,
+                                 monitor='val_loss',
+                                 verbose=0,
+                                 save_best_only=True,
+                                 mode='auto')
+    model.fit(training_generator,
+              epochs=30,
+              validation_data=test_generator,
+              callbacks=[cp_callback])
+
+def get_best_model(test_generator, cache_dir):
+    if not os.path.isdir(cache_dir):
+        return None
+    cost = 0.0
+    res_model = None
+    for entry in os.listdir(cache_dir):
+        model_path = os.path.join(cache_dir,entry)
+        if os.path.isdir(model_path):
+            model = tensorflow.keras.models.load_model(model_path)
+            #model.summary()
+            loss, acc = model.evaluate(test_generator, verbose=2)
+            if (acc + (1-loss) > cost):
+                cost = acc + (1-loss)
+                res_model = model
+    return res_model
+
 
 #----------------------------------------------------Start Here----------------------------------------------------------
 
-processed_data_dir = 'tmp'
+processed_data_dir = curr_dirname + '/tmp'
 processed_train_data_dir = processed_data_dir + '/train'
 processed_test_data_dir = processed_data_dir + '/test'
-#preprocess_data('../data/training/', processed_data_dir)
-cache_dir = 'cache/'
-checkpoint_path = cache_dir + 'model-{epoch:03d}.model'
+cache_dir = curr_dirname + '/cache/'
 
-model = createModel()
+#uncomment this to recreate cropped images
+#preprocess_data('../data/training/', processed_data_dir)
+
 test_data = ImageDataGenerator(rescale=1.0/255)
 test_generator = test_data.flow_from_directory(processed_test_data_dir, 
                                                 batch_size=10, 
                                                 target_size=(input_image_width, input_image_height))
 
-#see if we have trained model
-latest = tensorflow.train.latest_checkpoint(cache_dir)
-if latest != None:
-    model.load_weights(latest)
-    loss, acc = model.evaluate_generator(test_generator, verbose=2)
-    print("found trained model, accuracy: {:5.2f}%".format(100*acc))
-else:
-    #prepare training data
-    training_data = ImageDataGenerator(rescale=1.0/255,
-                                       rotation_range=40,
-                                       width_shift_range=0.2,
-                                       height_shift_range=0.2,
-                                       shear_range=0.2,
-                                       zoom_range=0.2,
-                                       horizontal_flip=True,
-                                       fill_mode='nearest')
-    training_generator = training_data.flow_from_directory(processed_train_data_dir, 
-                                                           batch_size=10, 
-                                                           target_size=(input_image_width, input_image_height))
-    #generate checkpoints
-    checkpoint = ModelCheckpoint(checkpoint_path,monitor='val_loss',verbose=0,save_best_only=True,mode='auto')
-    history = model.fit_generator(training_generator,
-                                  epochs=32,
-                                  validation_data=test_generator,
-                                  callbacks=[checkpoint])
-    loss, acc = model.evaluate_generator(test_generator, verbose=2)
-    print("trained model accuracy: {:5.2f}%".format(100*acc))
-    model.save_weights(weights_file)
+#see if we have trained model or train it
+model = get_best_model(test_generator, cache_dir)
+if model == None:
+    print ('training model...')
+    train_model(model, processed_train_data_dir, cache_dir, test_generator)
+    model = get_best_model(test_generator, cache_dir)
+
+if model == None:
+    raise Exception("ERROR: failed to create the model.")
+
+loss, acc = model.evaluate(test_generator, verbose=2)
+print("model accuracy: {:5.2f}%".format(100*acc))
