@@ -45,10 +45,6 @@ def calc_rects(ImagePtr):
     faces = face_cascade_classifier.detectMultiScale(gray, 1.1, 5)
     return faces
 
-def getFaceCoord(filename):
-    image = cv2.imread(filename)
-    return calc_rects(image)
-
 def getFaceImages(filename, dest, frame_w = input_image_width, frame_h = input_image_height):
     name = os.path.splitext(os.path.basename(filename))[0] 
     ext = os.path.splitext(os.path.basename(filename))[1]
@@ -170,7 +166,7 @@ test_generator = test_data.flow_from_directory(processed_test_data_dir,
                                                 batch_size=10, 
                                                 target_size=(input_image_width, input_image_height))
 
-#see if we have trained model or train it
+#see if we have trained model or need to train it
 model = get_best_model(test_generator, cache_dir)
 if model == None:
     print ('training model...')
@@ -182,3 +178,41 @@ if model == None:
 
 loss, acc = model.evaluate(test_generator, verbose=2)
 print("model accuracy: {:5.2f}%".format(100*acc))
+
+
+# now start the webcam face-mask detection
+
+# we use this to scale down the image to detect faces faster and
+# then expand back the detected faces.
+scale = 4
+face_labels = {0: 'no_mask', 1: ' '}
+face_color = {0: (0,0,255), 1: (0,255,0)}
+
+webcam = cv2.VideoCapture(0)
+while True:
+    ( _, frame) = webcam.read()
+    frame = cv2.flip(frame, 1, 1)
+    image = cv2.resize(frame, (frame.shape[1] // scale, frame.shape[0] // scale))
+    faces = face_cascade_classifier.detectMultiScale(image)
+    for face in faces:
+        # we expand-back the faces
+        (x, y, w, h) = [v * scale for v in face]
+        face_im = frame[y:y+h, x:x+w]
+        face_resized=cv2.resize(face_im,(input_image_width, input_image_height))
+        face_normalized=face_resized/255.0
+        face_reshaped=np.reshape(face_normalized,(1, input_image_width, input_image_height, 3))
+        face_reshaped = np.vstack([face_reshaped])
+        result=model.predict(face_reshaped)
+        #print(result)        
+        result=np.argmax(result,axis=1)[0]
+        cv2.rectangle(frame,(x,y),(x+w,y+h),face_color[result],2)
+        cv2.rectangle(frame,(x,y-20),(x+w,y),face_color[result],-1)
+        cv2.putText(frame, face_labels[result],(x, y-10),cv2.FONT_HERSHEY_PLAIN,0.8,(255,255,255),2)
+
+    cv2.imshow('Press ESC to exit...', frame)
+    key = cv2.waitKey(10)
+    if key == 27:
+        break
+
+webcam.release()
+cv2.destroyAllWindows()
