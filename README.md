@@ -56,3 +56,16 @@ On Windows:
 Then, use pip to install the required python packages.
 
     $ python3 -m pip install --upgrade -r depends/requirements.txt
+
+## How to run.
+
+Go to source directory
+
+    $ cd source
+
+run runner.py
+
+    $python3 ./runner.py
+
+There are already trained model in cache dir.
+If you need to re-train the model, get the training data and uncomment a line in runner.py and re-run the same command, it will pre-process the data and train the model.
