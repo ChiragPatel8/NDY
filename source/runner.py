@@ -41,7 +41,8 @@ def createModel(frame_w = input_image_width, frame_h = input_image_height):
 
 def calc_rects(ImagePtr):
     image=cv2.flip(ImagePtr,1,1)
-    gray = cv2.cvtColor(ImagePtr, cv2.COLOR_BGR2GRAY)
+    #gray = cv2.cvtColor(ImagePtr, cv2.COLOR_BGR2GRAY)
+    gray = ImagePtr
     faces = face_cascade_classifier.detectMultiScale(gray, 1.1, 5)
     return faces
 
@@ -79,15 +80,19 @@ def create_data_dir(src_dir, dirname, train, test):
 
     for file in train:
         if file.startswith('Y_'):
-            getFaceImages(src_dir + file, train_1)
+            shutil.copy2(src_dir + file, train_1)
+            #getFaceImages(src_dir + file, train_1)
         else:
-            getFaceImages(src_dir + file, train_0)
+            shutil.copy2(src_dir + file, train_0)
+            #getFaceImages(src_dir + file, train_0)
 
     for file in test:
         if file.startswith('Y_'):
-            getFaceImages(src_dir + file, test_1)
+            shutil.copy2(src_dir + file, test_1)
+            #getFaceImages(src_dir + file, test_1)
         else:
-            getFaceImages(src_dir + file, test_0)
+            shutil.copy2(src_dir + file, test_0)
+            #getFaceImages(src_dir + file, test_0)
 
 def preprocess_data(dir_path, train_dest_dir, test_data_size = 0.2, filetypes = ['.jpg', '.jpeg', '.png', '.bmp']):
     files = []
@@ -134,22 +139,33 @@ def train_model(model, train_dir, cache_dir, test_generator):
               validation_data=test_generator,
               callbacks=[cp_callback])
 
-def get_best_model(test_generator, cache_dir):
-    if not os.path.isdir(cache_dir):
+def get_best_model(test_generator, cache_dir, scan = False):
+    if not os.path.exists(cache_dir):
         return None
-    cost = 0.0
-    res_model = None
-    for entry in os.listdir(cache_dir):
-        model_path = os.path.join(cache_dir,entry)
-        if os.path.isdir(model_path):
-            model = tensorflow.keras.models.load_model(model_path)
-            #model.summary()
-            loss, acc = model.evaluate(test_generator, verbose=2)
-            if (acc + (1-loss) > cost):
-                cost = acc + (1-loss)
-                res_model = model
-    return res_model
-
+    #get the latest model
+    if not scan:
+        subdirs = os.listdir(cache_dir)
+        if len(subdirs) > 0:
+            subdirs.sort(key = (lambda x : x[6:9]), reverse = True)
+            return tensorflow.keras.models.load_model(cache_dir + subdirs[0])
+        else:
+            return None
+    else:
+        if not os.path.isdir(cache_dir):
+            return None
+        #scan thorugh every model and get best.
+        cost = 0.0
+        res_model = None
+        for entry in os.listdir(cache_dir):
+            model_path = os.path.join(cache_dir,entry)
+            if os.path.isdir(model_path):
+                model = tensorflow.keras.models.load_model(model_path)
+                #model.summary()
+                loss, acc = model.evaluate(test_generator, verbose=2)
+                if (acc + (1-loss) > cost):
+                    cost = acc + (1-loss)
+                    res_model = model
+        return res_model
 
 #----------------------------------------------------Start Here----------------------------------------------------------
 
