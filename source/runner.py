@@ -11,6 +11,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import shutil
+import matplotlib.pyplot as plt
 
 input_image_width = 150
 input_image_height = 150
@@ -134,11 +135,12 @@ def train_model(model, train_dir, cache_dir, test_generator):
                                  verbose=0,
                                  save_best_only=True,
                                  mode='auto')
-    model.fit(training_generator,
+    history = model.fit(training_generator,
               epochs=30,
               validation_data=test_generator,
               callbacks=[cp_callback])
-
+    np.save('my_history.npy',history.history)
+    
 def get_best_model(test_generator, cache_dir, scan = False):
     if not os.path.exists(cache_dir):
         return None
@@ -146,7 +148,7 @@ def get_best_model(test_generator, cache_dir, scan = False):
     if not scan:
         subdirs = os.listdir(cache_dir)
         if len(subdirs) > 0:
-            subdirs.sort(key = (lambda x : x[6:9]), reverse = True)
+            subdirs.sort(key = (lambda x : x[6:9]), reverse = False)
             return tensorflow.keras.models.load_model(cache_dir + subdirs[0])
         else:
             return None
@@ -183,7 +185,9 @@ test_generator = test_data.flow_from_directory(processed_test_data_dir,
                                                 target_size=(input_image_width, input_image_height))
 
 #see if we have trained model or need to train it
-model = get_best_model(test_generator, cache_dir)
+#model = get_best_model(test_generator, cache_dir)
+model = None
+
 if model == None:
     print ('training model...')
     train_model(model, processed_train_data_dir, cache_dir, test_generator)

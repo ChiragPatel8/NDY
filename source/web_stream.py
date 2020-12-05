@@ -6,7 +6,7 @@ if sys.version_info[0] < 3:
 import cv2, time
 
 streamer = cv2.VideoCapture(0)
-url = "http://192.168.225.26:8080/video"
+url = "http://192.168.225.40:8080/video"
 streamer.open(url)
 
 while True:
